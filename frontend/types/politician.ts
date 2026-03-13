@@ -79,6 +79,7 @@ export interface Politician {
     political_background: PoliticalBackground
 
     notes?: string | null
+    ai_summary?: string | null
 }
 
 /** Client-side computed stats */

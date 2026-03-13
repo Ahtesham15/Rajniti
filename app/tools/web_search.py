@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any, Optional
-from urllib.parse import quote_plus
 
 import httpx
 
@@ -27,6 +26,7 @@ _UA = (
 # Strategy 1: ddgs / duckduckgo-search package
 # ---------------------------------------------------------------------------
 
+
 def _import_ddgs() -> Any:
     """Return the DDGS class from whichever package is available."""
     try:
@@ -36,7 +36,7 @@ def _import_ddgs() -> Any:
     except ImportError:
         pass
     try:
-        from duckduckgo_search import DDGS  # type: ignore[import-untyped]
+        from duckduckgo_search import DDGS  # type: ignore[import-untyped,no-redef]
 
         return DDGS
     except ImportError:
@@ -46,6 +46,7 @@ def _import_ddgs() -> Any:
 # ---------------------------------------------------------------------------
 # Strategy 2: lightweight httpx fallback (HTML-lite endpoint)
 # ---------------------------------------------------------------------------
+
 
 def _httpx_search(query: str, max_results: int, timeout: int) -> list[dict[str, str]]:
     """Scrape DuckDuckGo HTML-lite for search results (no JS required)."""
@@ -75,7 +76,7 @@ def _httpx_search(query: str, max_results: int, timeout: int) -> list[dict[str, 
             href = title_tag.get("href", "")
             if isinstance(href, list):
                 href = href[0] if href else ""
-            url_match = re.search(r"uddg=([^&]+)", href)
+            url_match = re.search(r"uddg=([^&]+)", href)  # type: ignore[arg-type]
             url = ""
             if url_match:
                 from urllib.parse import unquote
@@ -102,6 +103,7 @@ def _httpx_search(query: str, max_results: int, timeout: int) -> list[dict[str, 
 # ---------------------------------------------------------------------------
 # Public tool
 # ---------------------------------------------------------------------------
+
 
 class WebSearchTool:
     """Search the web via DuckDuckGo with automatic fallback."""
@@ -162,9 +164,7 @@ class WebSearchTool:
             logger.info("WebSearch: %d results for %r (httpx)", len(results), query)
         return results
 
-    def search_text(
-        self, query: str, max_results: Optional[int] = None
-    ) -> str:
+    def search_text(self, query: str, max_results: Optional[int] = None) -> str:
         """Search and return a human-readable text block."""
         results = self.search(query, max_results)
         if not results:

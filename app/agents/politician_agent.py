@@ -106,7 +106,9 @@ class PoliticianPoliticalBackground:
     def should_run(self, politician: Dict[str, Any], force: bool = False) -> bool:
         if force:
             return True
-        elections = (politician.get("political_background") or {}).get("elections") or []
+        elections = (politician.get("political_background") or {}).get(
+            "elections"
+        ) or []
         return not elections
 
     @log(logger, "PoliticianPoliticalBackground.run")
@@ -508,6 +510,50 @@ class PoliticianContact:
         return {"process": self.name, "ok": True, "skipped": False, "updates": updates}
 
 
+class PoliticianSummary:
+    """AI narrative summary process for one politician."""
+
+    name = "ai_summary"
+
+    def __init__(self, base_agent: BaseAgent):
+        self.base = base_agent
+
+    def should_run(self, politician: Dict[str, Any], force: bool = False) -> bool:
+        return force or not politician.get("ai_summary")
+
+    @log(logger, "PoliticianSummary.run")
+    def run(
+        self,
+        politician: Dict[str, Any],
+        force: bool = False,
+        context: str = "",
+    ) -> Dict[str, Any]:
+        if not self.should_run(politician, force):
+            return {
+                "process": self.name,
+                "ok": True,
+                "skipped": True,
+                "reason": "already_present",
+            }
+
+        prompt = PoliticianPrompts.summary(politician)
+        logger.info(
+            "ai_summary: calling LLM (id=%s name=%s)",
+            politician.get("id"),
+            politician.get("name"),
+        )
+        raw = self.base._run_llm_with_context(prompt, context)
+        if not raw or not raw.strip():
+            return {
+                "process": self.name,
+                "ok": False,
+                "error": "empty_response",
+            }
+
+        updates = {"ai_summary": raw.strip()}
+        return {"process": self.name, "ok": True, "skipped": False, "updates": updates}
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
@@ -527,6 +573,7 @@ class PoliticianAgent(BaseAgent):
             PoliticianFamilyBackground(self),
             PoliticianCriminalRecords(self),
             PoliticianContact(self),
+            PoliticianSummary(self),
         ]
 
     @log(logger, "PoliticianAgent.run")
@@ -561,12 +608,12 @@ class PoliticianAgent(BaseAgent):
         return self.cache.exists(self._process_cache_key(politician_id, process_name))
 
     def _mark_process_cached(self, politician_id: str, process_name: str) -> None:
-        self.cache.set(self._process_cache_key(politician_id, process_name), {"processed": True})
+        self.cache.set(
+            self._process_cache_key(politician_id, process_name), {"processed": True}
+        )
 
     @log(logger, "PoliticianAgent._run_one_by_id")
-    def _run_one_by_id(
-        self, politician_id: str, force: bool = False
-    ) -> Dict[str, Any]:
+    def _run_one_by_id(self, politician_id: str, force: bool = False) -> Dict[str, Any]:
         politician = self.politician_service.get_by_id(politician_id)
         if not politician:
             return {"ok": False, "id": politician_id, "error": "politician_not_found"}

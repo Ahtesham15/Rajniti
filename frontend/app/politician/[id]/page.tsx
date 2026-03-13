@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { usePolitician } from "@/hooks/usePoliticians"
 import { Footer, Navbar } from "@/components/layout"
@@ -244,6 +244,179 @@ function ContactSection({ politician }: { politician: Politician }) {
     )
 }
 
+function KnowYourNetaJiSection({ politician }: { politician: Politician }) {
+    const [summary, setSummary] = useState<string | null>(politician.ai_summary ?? null)
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL
+
+    const generateSummary = async () => {
+        setLoading(true)
+        setError(null)
+        try {
+            const res = await fetch(`${API_BASE}/politicians/${politician.id}/summary`)
+            const data = await res.json()
+            if (data.success) {
+                setSummary(data.summary)
+            } else {
+                setError(data.error || "Failed to generate summary")
+            }
+        } catch {
+            setError("Error connecting to API")
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <Section title='Know Your Neta Ji' icon='/logo/Parliament.png'>
+            {summary ? (
+                <div className='bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-5 border border-orange-200'>
+                    <Text variant='body' className='text-gray-700 leading-relaxed'>
+                        {summary}
+                    </Text>
+                    <button
+                        onClick={generateSummary}
+                        disabled={loading}
+                        className='mt-3 text-xs text-orange-500 hover:text-orange-700 underline disabled:opacity-50'>
+                        {loading ? "Refreshing…" : "Refresh summary"}
+                    </button>
+                </div>
+            ) : (
+                <div className='text-center py-4'>
+                    <Text variant='small' className='text-gray-500 mb-3 block'>
+                        Get an AI-generated overview of {politician.name}'s political profile.
+                    </Text>
+                    {error && (
+                        <Text variant='small' className='text-red-500 mb-2 block'>
+                            {error}
+                        </Text>
+                    )}
+                    <button
+                        onClick={generateSummary}
+                        disabled={loading}
+                        className='bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition-colors'>
+                        {loading ? (
+                            <span className='flex items-center gap-2'>
+                                <span className='inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></span>
+                                Generating…
+                            </span>
+                        ) : (
+                            "Generate Summary"
+                        )}
+                    </button>
+                </div>
+            )}
+        </Section>
+    )
+}
+
+function NetajiDoctorSection({ politician }: { politician: Politician }) {
+    const [question, setQuestion] = useState("")
+    const [answer, setAnswer] = useState<string | null>(null)
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL
+
+    const SUGGESTED = [
+        "What has this politician done for their constituency?",
+        "What are the criminal charges against them?",
+        "What is their educational background?",
+        "How many elections have they contested?",
+    ]
+
+    const submit = async (q: string) => {
+        if (!q.trim()) return
+        setLoading(true)
+        setError(null)
+        setAnswer(null)
+        try {
+            const res = await fetch(`${API_BASE}/politicians/${politician.id}/ask`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ question: q }),
+            })
+            const data = await res.json()
+            if (data.success) {
+                setAnswer(data.answer)
+            } else {
+                setError(data.error || "Failed to get answer")
+            }
+        } catch {
+            setError("Error connecting to API")
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <Section title='Neta Ji Doctor' icon='/logo/Profile.png'>
+            <Text variant='small' className='text-gray-500 mb-4 block'>
+                Ask anything about {politician.name}'s background, career, or records.
+            </Text>
+
+            {/* Suggested questions */}
+            <div className='flex flex-wrap gap-2 mb-4'>
+                {SUGGESTED.map((q) => (
+                    <button
+                        key={q}
+                        onClick={() => {
+                            setQuestion(q)
+                            submit(q)
+                        }}
+                        disabled={loading}
+                        className='text-xs bg-orange-50 border border-orange-200 text-orange-700 px-3 py-1.5 rounded-full hover:bg-orange-100 disabled:opacity-50 transition-colors'>
+                        {q}
+                    </button>
+                ))}
+            </div>
+
+            {/* Input */}
+            <div className='flex gap-2'>
+                <input
+                    type='text'
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && submit(question)}
+                    placeholder={`Ask about ${politician.name}…`}
+                    className='flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400'
+                />
+                <button
+                    onClick={() => submit(question)}
+                    disabled={loading || !question.trim()}
+                    className='bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition-colors'>
+                    {loading ? (
+                        <span className='inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></span>
+                    ) : (
+                        "Ask"
+                    )}
+                </button>
+            </div>
+
+            {/* Answer */}
+            {error && (
+                <div className='mt-4 bg-red-50 border border-red-200 rounded-lg p-4'>
+                    <Text variant='small' className='text-red-600'>
+                        {error}
+                    </Text>
+                </div>
+            )}
+            {answer && (
+                <div className='mt-4 bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-xl p-5'>
+                    <div className='flex items-center gap-2 mb-2'>
+                        <span className='text-green-600 font-semibold text-xs uppercase tracking-wide'>Answer</span>
+                    </div>
+                    <Text variant='body' className='text-gray-700 leading-relaxed whitespace-pre-wrap'>
+                        {answer}
+                    </Text>
+                </div>
+            )}
+        </Section>
+    )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────
 
 export default function PoliticianPage() {
@@ -409,6 +582,14 @@ function PoliticianPageContent() {
                     <CriminalRecordsSection records={p.criminal_records} />
 
                     <ContactSection politician={p} />
+
+                    <div className='lg:col-span-2'>
+                        <KnowYourNetaJiSection politician={p} />
+                    </div>
+
+                    <div className='lg:col-span-2'>
+                        <NetajiDoctorSection politician={p} />
+                    </div>
 
                     {/* Contribute CTA */}
                     <div className='lg:col-span-2 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-6 text-center text-white mb-8'>

@@ -23,6 +23,8 @@ def politician_to_document(p: dict) -> str:
     ]
 
     bg = p.get("political_background") or {}
+    if bg.get("summary"):
+        parts.append(f"Political Summary: {bg['summary']}")
     for e in bg.get("elections") or []:
         parts.append(
             f"Election: {e.get('year','')} {e.get('type','')} {e.get('party','')} "
@@ -40,6 +42,12 @@ def politician_to_document(p: dict) -> str:
             f"Criminal: {cr.get('name','')} {cr.get('type','') or ''} {cr.get('year','') or ''}"
         )
 
+    for fm in p.get("family_background") or []:
+        parts.append(f"Family: {fm.get('name','')} ({fm.get('relation','')})")
+
+    if p.get("ai_summary"):
+        parts.append(f"Summary: {p['ai_summary']}")
+
     return ". ".join([x for x in parts if x and x.strip()])
 
 
@@ -48,6 +56,7 @@ def politician_to_metadata(p: dict) -> dict:
     party = elections[0].get("party") if elections else ""
 
     return {
+        "name": p.get("name", ""),
         "type": p.get("type", ""),
         "state": p.get("state", ""),
         "constituency": p.get("constituency", ""),

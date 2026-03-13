@@ -120,3 +120,114 @@ class PoliticianPrompts:
             "Only include officially published contact details. "
             'If unknown, return {"email": null, "phone": null, "address": null}'
         )
+
+    @staticmethod
+    def summary(politician: Dict[str, Any]) -> str:
+        """Prompt to generate a narrative AI summary of the politician."""
+        name = politician.get("name", "")
+        state = politician.get("state", "")
+        constituency = politician.get("constituency", "")
+        ptype = politician.get("type", "")
+        elections = (politician.get("political_background") or {}).get(
+            "elections"
+        ) or []
+        party = elections[0].get("party", "") if elections else ""
+        education_list = politician.get("education") or []
+        edu_str = ", ".join(
+            e.get("qualification", "") for e in education_list if e.get("qualification")
+        )
+        criminal_count = len(politician.get("criminal_records") or [])
+        family = politician.get("family_background") or []
+        political_summary = (politician.get("political_background") or {}).get(
+            "summary"
+        ) or ""
+
+        return (
+            "You are writing a concise, factual profile summary for an Indian politician.\n"
+            "Write 3-4 sentences covering: who they are, their political career, notable facts.\n"
+            "Keep a neutral, informative tone. Do not speculate. Use only verified facts.\n"
+            "Return ONLY the summary text, no JSON, no headings.\n\n"
+            f"Name: {name}\n"
+            f"Type: {ptype}\n"
+            f"State: {state}\n"
+            f"Constituency: {constituency}\n"
+            f"Party: {party}\n"
+            f"Education: {edu_str or 'Unknown'}\n"
+            f"Criminal cases: {criminal_count}\n"
+            f"Family members on record: {len(family)}\n"
+            f"Political summary: {political_summary or 'Not available'}\n"
+            f"Elections on record: {len(elections)}\n"
+        )
+
+    @staticmethod
+    def ask(politician: Dict[str, Any], question: str) -> str:
+        """Prompt to answer a user's question about a specific politician."""
+        name = politician.get("name", "")
+        state = politician.get("state", "")
+        constituency = politician.get("constituency", "")
+        ptype = politician.get("type", "")
+        elections = (politician.get("political_background") or {}).get(
+            "elections"
+        ) or []
+        party = elections[0].get("party", "") if elections else ""
+
+        education_list = politician.get("education") or []
+        edu_items = (
+            "\n".join(
+                f"  - {e.get('qualification', '')} from "
+                f"{e.get('institution', '?')} ({e.get('year_completed', '?')})"
+                for e in education_list
+            )
+            or "  - Not available"
+        )
+
+        criminal_records = politician.get("criminal_records") or []
+        crimes_str = (
+            "\n".join(
+                f"  - {c.get('name', '')} [{c.get('type', '')}] ({c.get('year', '')})"
+                for c in criminal_records
+            )
+            or "  - None on record"
+        )
+
+        family = politician.get("family_background") or []
+        family_str = (
+            "\n".join(
+                f"  - {m.get('name', '')} ({m.get('relation', '')})" for m in family
+            )
+            or "  - Not available"
+        )
+
+        elections_str = (
+            "\n".join(
+                f"  - {e.get('year', '')} {e.get('type', '')} "
+                f"{e.get('constituency', '')} "
+                f"{e.get('state', '')} [{e.get('party', '')}] → {e.get('status', '')}"
+                for e in elections
+            )
+            or "  - Not available"
+        )
+
+        political_summary = (politician.get("political_background") or {}).get(
+            "summary"
+        ) or "Not available"
+        contact = politician.get("contact") or {}
+        social = politician.get("social_media") or {}
+        ai_summary = politician.get("ai_summary") or ""
+
+        return (
+            f"You are an expert assistant on Indian politics. Answer the user's question about {name}.\n"
+            "Be factual, concise, and accurate. If you don't know, say so clearly.\n"
+            "Only use the data below plus your own knowledge. Do not speculate.\n\n"
+            "=== Politician Profile ===\n"
+            f"Name: {name}\nType: {ptype}\nState: {state}\nConstituency: {constituency}\nParty: {party}\n\n"
+            f"Education:\n{edu_items}\n\n"
+            f"Political Career:\n{elections_str}\n"
+            f"Summary: {political_summary}\n\n"
+            f"Criminal Records:\n{crimes_str}\n\n"
+            f"Family:\n{family_str}\n\n"
+            f"Contact: {contact.get('email', '') or ''} {contact.get('phone', '') or ''}\n"
+            f"Social: {social.get('twitter', '') or ''} {social.get('website', '') or ''}\n"
+            + (f"AI Summary: {ai_summary}\n" if ai_summary else "")
+            + f"\n=== User Question ===\n{question}"
+        )

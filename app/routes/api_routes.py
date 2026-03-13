@@ -6,6 +6,7 @@ so every route revolves around politicians.
 """
 
 import logging
+
 from flask import Blueprint, jsonify, request
 
 from app.controllers.politician_controller import PoliticianController
@@ -53,7 +54,10 @@ def search_politicians():
     try:
         query = request.args.get("q", "").strip()
         if not query:
-            return jsonify({"success": False, "error": "Query parameter 'q' is required"}), 400
+            return (
+                jsonify({"success": False, "error": "Query parameter 'q' is required"}),
+                400,
+            )
 
         result = politician_ctrl.search(
             query=query,
@@ -121,7 +125,9 @@ def get_states():
     try:
         election_type = request.args.get("type")
         states = politician_ctrl.get_states(election_type=election_type)
-        return jsonify({"success": True, "data": {"states": states, "total": len(states)}})
+        return jsonify(
+            {"success": True, "data": {"states": states, "total": len(states)}}
+        )
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -132,7 +138,9 @@ def get_parties():
     try:
         election_type = request.args.get("type")
         parties = politician_ctrl.get_parties(election_type=election_type)
-        return jsonify({"success": True, "data": {"parties": parties, "total": len(parties)}})
+        return jsonify(
+            {"success": True, "data": {"parties": parties, "total": len(parties)}}
+        )
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -149,6 +157,7 @@ def _get_questions_service():
     if _questions_service is None:
         try:
             from app.services.questions_service import QuestionsService
+
             _questions_service = QuestionsService()
         except Exception as e:
             logger.warning("QuestionsService unavailable: %s", e)
@@ -161,10 +170,16 @@ def get_predefined_questions():
     """Get predefined questions."""
     try:
         from app.schemas.questions import PREDEFINED_QUESTIONS
-        return jsonify({
-            "success": True,
-            "data": {"questions": PREDEFINED_QUESTIONS, "total": len(PREDEFINED_QUESTIONS)},
-        })
+
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "questions": PREDEFINED_QUESTIONS,
+                    "total": len(PREDEFINED_QUESTIONS),
+                },
+            }
+        )
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -179,10 +194,15 @@ def ask_question():
 
         qs = _get_questions_service()
         if not qs:
-            return jsonify({
-                "success": False,
-                "error": "Questions service unavailable. Vector DB may not be configured.",
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Questions service unavailable. Vector DB may not be configured.",
+                    }
+                ),
+                503,
+            )
 
         result = qs.answer_question(
             question=data["question"],
@@ -200,14 +220,20 @@ def answer_predefined_question(question_id):
     try:
         qs = _get_questions_service()
         if not qs:
-            return jsonify({
-                "success": False,
-                "error": "Questions service unavailable.",
-            }), 503
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Questions service unavailable.",
+                    }
+                ),
+                503,
+            )
 
         n_results = request.args.get("n_results", default=5, type=int)
         result = qs.answer_predefined_question(
-            question_id=question_id, n_results=n_results,
+            question_id=question_id,
+            n_results=n_results,
         )
         if not result.get("success"):
             return jsonify(result), 404
@@ -217,29 +243,109 @@ def answer_predefined_question(question_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# ==================== POLITICIAN Q&A & SUMMARY ====================
+
+
+_politician_qa_service = None
+
+
+def _get_politician_qa_service():
+    """Lazy init to avoid import errors when LLM is not configured."""
+    global _politician_qa_service
+    if _politician_qa_service is None:
+        try:
+            from app.services.politician_qa_service import PoliticianQAService
+
+            _politician_qa_service = PoliticianQAService()
+        except Exception as e:
+            logger.warning("PoliticianQAService unavailable: %s", e)
+            return None
+    return _politician_qa_service
+
+
+@api_bp.route("/politicians/<politician_id>/summary", methods=["GET"])
+def get_politician_summary(politician_id):
+    """Get or generate AI summary for a politician."""
+    try:
+        svc = _get_politician_qa_service()
+        if not svc:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Q&A service unavailable. LLM may not be configured.",
+                    }
+                ),
+                503,
+            )
+
+        result = svc.generate_summary(politician_id)
+        if not result.get("success"):
+            status = 404 if result.get("error") == "Politician not found" else 500
+            return jsonify(result), status
+        return jsonify(result)
+    except Exception as e:
+        logger.error("get_politician_summary error: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api_bp.route("/politicians/<politician_id>/ask", methods=["POST"])
+def ask_about_politician(politician_id):
+    """Ask a free-form question about a specific politician."""
+    try:
+        data = request.get_json()
+        if not data or not data.get("question"):
+            return jsonify({"success": False, "error": "Question is required"}), 400
+
+        svc = _get_politician_qa_service()
+        if not svc:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Q&A service unavailable. LLM may not be configured.",
+                    }
+                ),
+                503,
+            )
+
+        result = svc.ask(politician_id, data["question"])
+        if not result.get("success"):
+            status = 404 if result.get("error") == "Politician not found" else 500
+            return jsonify(result), status
+        return jsonify(result)
+    except Exception as e:
+        logger.error("ask_about_politician error: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # ==================== ROOT & HEALTH ====================
 
 
 @api_bp.route("/", methods=["GET"])
 def api_root():
     """API root."""
-    return jsonify({
-        "success": True,
-        "message": "Welcome to Rajniti API",
-        "version": "2.0.0",
-        "endpoints": {
-            "politicians": "/api/v1/politicians",
-            "search": "/api/v1/politicians/search?q=<query>",
-            "by_state": "/api/v1/politicians/state/<state>",
-            "by_party": "/api/v1/politicians/party/<party>",
-            "stats": "/api/v1/stats",
-            "states": "/api/v1/states",
-            "parties": "/api/v1/parties",
-            "questions": "/api/v1/questions",
-            "ask": "/api/v1/questions/ask (POST)",
-            "health": "/api/v1/health",
-        },
-    })
+    return jsonify(
+        {
+            "success": True,
+            "message": "Welcome to Rajniti API",
+            "version": "2.0.0",
+            "endpoints": {
+                "politicians": "/api/v1/politicians",
+                "search": "/api/v1/politicians/search?q=<query>",
+                "by_state": "/api/v1/politicians/state/<state>",
+                "by_party": "/api/v1/politicians/party/<party>",
+                "stats": "/api/v1/stats",
+                "states": "/api/v1/states",
+                "parties": "/api/v1/parties",
+                "questions": "/api/v1/questions",
+                "ask": "/api/v1/questions/ask (POST)",
+                "politician_summary": "/api/v1/politicians/<id>/summary",
+                "politician_ask": "/api/v1/politicians/<id>/ask (POST)",
+                "health": "/api/v1/health",
+            },
+        }
+    )
 
 
 @api_bp.route("/health", methods=["GET"])
@@ -248,12 +354,14 @@ def health_check():
     from app.core.database import check_db_health
 
     db_ok = check_db_health()
-    return jsonify({
-        "success": True,
-        "message": "Rajniti API is healthy",
-        "version": "2.0.0",
-        "database": {
-            "connected": db_ok,
-            "status": "healthy" if db_ok else "not configured",
-        },
-    })
+    return jsonify(
+        {
+            "success": True,
+            "message": "Rajniti API is healthy",
+            "version": "2.0.0",
+            "database": {
+                "connected": db_ok,
+                "status": "healthy" if db_ok else "not configured",
+            },
+        }
+    )
